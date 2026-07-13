@@ -1,0 +1,21 @@
+{
+  "name": "kavia-fun-bot",
+  "version": "1.0.0",
+  "description": "Fun Discord bot: advanced music + AI chat/profile features",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "deploy-commands": "node deploy-commands.js"
+  },
+"dependencies": {
+    "discord.js": "^14.16.3",
+    "discord-player": "^7.1.0",
+    "@discord-player/extractor": "^7.1.0",
+    "mongoose": "^8.7.0",
+    "dotenv": "^16.4.5",
+    "openai": "^4.68.4",
+    "ffmpeg-static": "^5.2.0",
+    "@snazzah/davey": "^0.1.8"
+}
+}

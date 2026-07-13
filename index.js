@@ -40,6 +40,13 @@ client.player = player;
   await player.extractors.loadMulti(DefaultExtractors);
   console.log('[music] Extractors loaded.');
 })();
+// Log any playback errors so we can actually see what's going wrong
+player.events.on('error', (queue, error) => {
+  console.error(`[music] General player error in guild ${queue.guild.id}:`, error);
+});
+player.events.on('playerError', (queue, error) => {
+  console.error(`[music] Player error while streaming in guild ${queue.guild.id}:`, error);
+});
 
 // Collection to hold all our slash commands, keyed by command name
 client.commands = new Collection();

@@ -1,10 +1,12 @@
 // commands/play.js
-// Plays a song from a YouTube link or search term, and shows a
-// "now playing" embed with a DJ control panel underneath.
+// Plays a song from a YouTube link or search term, shows a "now playing"
+// embed with DJ control panel buttons, and applies this server's saved
+// auto-DJ setting automatically.
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { useMainPlayer } = require('discord-player');
+const { useMainPlayer, QueueRepeatMode } = require('discord-player');
 const { buildControlRow } = require('../music/controlPanel');
+const GuildSettings = require('../models/GuildSettings');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -42,6 +44,12 @@ module.exports = {
           leaveOnEndCooldown: 60_000,
         },
       });
+
+      // Apply this server's saved auto-DJ setting
+      const settings = await GuildSettings.findOne({ guildId: interaction.guild.id });
+      if (settings?.autoDjEnabled) {
+        queue.setRepeatMode(QueueRepeatMode.AUTOPLAY);
+      }
 
       const embed = new EmbedBuilder()
         .setTitle('🎵 Added to Queue')

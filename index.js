@@ -5,6 +5,7 @@ const { Client, GatewayIntentBits, Collection, Partials } = require('discord.js'
 const mongoose = require('mongoose');
 const { Player } = require('discord-player');
 const { DefaultExtractors } = require('@discord-player/extractor');
+const { YoutubeiExtractor } = require('discord-player-youtubei');
 
 // Point discord-player at the ffmpeg binary bundled by ffmpeg-static,
 // so nobody needs to install ffmpeg system-wide.
@@ -38,8 +39,16 @@ client.player = player;
 // into actually playable audio streams
 (async () => {
   await player.extractors.loadMulti(DefaultExtractors);
+
+  // Swap the default YouTube extractor for a more reliable one - the
+  // built-in one often gets blocked by YouTube's bot detection when
+  // running on cloud hosts like Railway (datacenter IPs get flagged).
+  player.extractors.unregister('com.discord-player.youtubeext');
+  await player.extractors.register(YoutubeiExtractor, {});
+
   console.log('[music] Extractors loaded.');
 })();
+
 // Log any playback errors so we can actually see what's going wrong
 player.events.on('error', (queue, error) => {
   console.error(`[music] General player error in guild ${queue.guild.id}:`, error);

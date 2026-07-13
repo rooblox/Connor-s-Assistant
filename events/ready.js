@@ -1,4 +1,3 @@
-@'
 // events/ready.js
 // Fires once when the bot successfully logs in and is ready to go.
 // Sets the bot's Discord status/presence.
@@ -19,4 +18,3 @@ module.exports = {
     });
   },
 };
-'@ | Set-Content events\ready.js

@@ -1,10 +1,11 @@
 // commands/uno.js
-// Starts a new Uno lobby: creates a dedicated channel, posts a join
-// screen, and tracks it in Mongo so it can be auto-cleaned up later.
+// Posts a join lobby in the CURRENT channel. Players join here. Once the
+// host starts the game (or kicks people first), a private game channel
+// gets created with only the confirmed players able to see it.
 
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
-const UnoGame = require('../models/UnoGame');
+const { SlashCommandBuilder } = require('discord.js');
 const gameManager = require('../games/uno/gameManager');
+const { renderLobbyEmbed, renderLobbyRow } = require('../games/uno/render');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -12,38 +13,20 @@ module.exports = {
     .setDescription('Start a game of Uno'),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    const existing = gameManager.getGame(interaction.channel.id);
+    if (existing) {
+      return interaction.reply({ content: `There's already an active Uno lobby/game in this channel.`, ephemeral: true });
+    }
 
-    const shortId = Math.random().toString(36).slice(2, 8);
-    const channelName = `uno-${shortId}`;
-
-    const channel = await interaction.guild.channels.create({
-      name: channelName,
-      type: ChannelType.GuildText,
-      topic: `Uno game started by ${interaction.user.username}`,
-    });
-
-    await UnoGame.create({
-      channelId: channel.id,
-      guildId: interaction.guild.id,
-      status: 'lobby',
-    });
-
-    const game = gameManager.createGame(channel.id, interaction.guild.id, interaction.user.id);
+    const game = gameManager.createGame(interaction.channel.id, interaction.guild.id, interaction.user.id);
     gameManager.addPlayer(game, interaction.user.id, interaction.user.username);
 
-    const embed = new EmbedBuilder()
-      .setTitle('🎴 Uno Lobby')
-      .setColor(0xE74C3C)
-      .setDescription(`${interaction.user.username} started a game! Click **Join** to play.\n\n**Players (1/6):**\n• ${interaction.user.username}`)
-      .setFooter({ text: `This channel auto-deletes after 24 hours if the game never finishes.` });
+    const message = await interaction.reply({
+      embeds: [renderLobbyEmbed(game)],
+      components: [renderLobbyRow()],
+      fetchReply: true,
+    });
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('uno_join').setLabel('Join').setEmoji('➕').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('uno_start').setLabel('Start Game').setEmoji('▶️').setStyle(ButtonStyle.Primary),
-    );
-
-    await channel.send({ embeds: [embed], components: [row] });
-    await interaction.editReply(`Game channel created: ${channel}`);
+    game.publicMessageId = message.id;
   },
 };

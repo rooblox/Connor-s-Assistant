@@ -10,14 +10,28 @@ function renderLobbyEmbed(game) {
   return new EmbedBuilder()
     .setTitle('🎴 Uno Lobby')
     .setColor(0xE74C3C)
-    .setDescription(`Click **Join** to play, or **Start Game** once everyone's in (2-6 players).\n\n**Players (${game.players.length}/6):**\n${playerList}`)
-    .setFooter({ text: `This channel auto-deletes after 24 hours if the game never finishes.` });
+    .setDescription(`Click **Join** to play. The host can **Manage Players** to kick anyone, then hit **Start Game** (2-6 players) - a private game channel will be created for whoever's still in.\n\n**Players (${game.players.length}/6):**\n${playerList}`);
 }
 
 function renderLobbyRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('uno_join').setLabel('Join').setEmoji('➕').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('uno_manage').setLabel('Manage Players').setEmoji('🔧').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('uno_start').setLabel('Start Game').setEmoji('▶️').setStyle(ButtonStyle.Primary),
+  );
+}
+
+function renderKickSelect(game, hostId) {
+  const kickable = game.players.filter(p => p.id !== hostId);
+  if (kickable.length === 0) return null;
+
+  const options = kickable.map(p => ({ label: p.username, value: p.id }));
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('uno_kick_select')
+      .setPlaceholder('Choose a player to remove')
+      .addOptions(options),
   );
 }
 
@@ -75,6 +89,7 @@ function renderColorChoiceRow() {
 module.exports = {
   renderLobbyEmbed,
   renderLobbyRow,
+  renderKickSelect,
   renderGameEmbed,
   renderGameRow,
   renderHandComponents,

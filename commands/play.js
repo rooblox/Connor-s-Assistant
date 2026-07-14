@@ -33,14 +33,12 @@ module.exports = {
 
     try {
       const { track, queue } = await player.play(voiceChannel, query, {
-        // Only affects plain search terms (not direct links) - defaults
-        // searches to SoundCloud since it's far more reliable than YouTube
-        // right now (YouTube's anti-bot measures break most extractors).
         searchEngine: QueryType.SOUNDCLOUD_SEARCH,
         nodeOptions: {
           metadata: {
             channel: interaction.channel,
           },
+          debug: true,
           leaveOnEmpty: true,
           leaveOnEmptyCooldown: 60_000,
           leaveOnEnd: true,
@@ -48,7 +46,6 @@ module.exports = {
         },
       });
 
-      // Apply this server's saved auto-DJ setting
       const settings = await GuildSettings.findOne({ guildId: interaction.guild.id });
       if (settings?.autoDjEnabled) {
         queue.setRepeatMode(QueueRepeatMode.AUTOPLAY);

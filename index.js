@@ -49,6 +49,15 @@ client.player = player;
   console.log('[music] Extractors loaded.');
 })();
 
+// Turn on discord-player's internal debug logs to see exactly what
+// happens during stream extraction/playback
+player.on('debug', (message) => {
+  console.log(`[player debug] ${message}`);
+});
+player.events.on('debug', (queue, message) => {
+  console.log(`[queue debug] ${message}`);
+});
+
 // Log any playback errors so we can actually see what's going wrong
 player.events.on('error', (queue, error) => {
   console.error(`[music] General player error in guild ${queue.guild.id}:`, error);
@@ -56,6 +65,7 @@ player.events.on('error', (queue, error) => {
 player.events.on('playerError', (queue, error) => {
   console.error(`[music] Player error while streaming in guild ${queue.guild.id}:`, error);
 });
+
 let trackStartTimes = new Map();
 
 player.events.on('playerStart', (queue, track) => {

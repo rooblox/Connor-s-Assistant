@@ -17,6 +17,7 @@
     "openai": "^4.68.4",
     "ffmpeg-static": "^5.2.0",
     "@snazzah/davey": "^0.1.8",
-    "discord-player-youtubei": "^2.0.0"
+    "discord-player-youtubei": "^2.0.0",
+    "youtube-dl-exec": "^3.1.9"
   }
 }

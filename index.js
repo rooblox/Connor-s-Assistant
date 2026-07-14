@@ -56,6 +56,27 @@ player.events.on('error', (queue, error) => {
 player.events.on('playerError', (queue, error) => {
   console.error(`[music] Player error while streaming in guild ${queue.guild.id}:`, error);
 });
+player.events.on('playerStart', (queue, track) => {
+  console.log(`[music] Started playing: ${track.title} in guild ${queue.guild.id}`);
+});
+player.events.on('playerFinish', (queue, track) => {
+  console.log(`[music] Finished playing: ${track.title} in guild ${queue.guild.id}`);
+});
+player.events.on('playerSkip', (queue, track) => {
+  console.log(`[music] Track skipped/failed: ${track.title} in guild ${queue.guild.id}`);
+});
+player.events.on('emptyQueue', (queue) => {
+  console.log(`[music] Queue is now empty in guild ${queue.guild.id}`);
+});
+player.events.on('emptyChannel', (queue) => {
+  console.log(`[music] Voice channel is empty in guild ${queue.guild.id}`);
+});
+player.events.on('disconnect', (queue) => {
+  console.log(`[music] Bot disconnected from voice in guild ${queue.guild.id}`);
+});
+player.events.on('connectionDestroyed', (queue) => {
+  console.log(`[music] Voice connection destroyed in guild ${queue.guild.id}`);
+});
 
 // Collection to hold all our slash commands, keyed by command name
 client.commands = new Collection();

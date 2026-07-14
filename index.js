@@ -125,3 +125,26 @@ if (fs.existsSync(eventsPath)) {
 }
 
 client.login(process.env.DISCORD_TOKEN);
+
+// --- Uno abandoned-game cleanup ---
+// Every 30 minutes, check for Uno game channels older than 24 hours that
+// never finished, and delete them.
+const UnoGame = require('./models/UnoGame');
+const unoGameManager = require('./games/uno/gameManager');
+
+setInterval(async () => {
+  try {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const staleGames = await UnoGame.find({ status: { $ne: 'finished' }, createdAt: { $lt: cutoff } });
+
+    for (const staleGame of staleGames) {
+      const channel = await client.channels.fetch(staleGame.channelId).catch(() => null);
+      if (channel) await channel.delete().catch(() => {});
+      unoGameManager.deleteGame(staleGame.channelId);
+      await UnoGame.findByIdAndUpdate(staleGame._id, { status: 'finished' });
+      console.log(`[uno] Cleaned up abandoned game channel ${staleGame.channelId}`);
+    }
+  } catch (error) {
+    console.error('[uno] Cleanup check failed:', error);
+  }
+}, 30 * 60 * 1000);

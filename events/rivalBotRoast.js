@@ -53,7 +53,7 @@ module.exports = {
       return;
     }
 
-   // --- Case 2: a human mentioned the rival bot ---
+    // --- Case 2: a human mentioned the rival bot ---
     if (message.author.bot) return; // don't trigger off other bots mentioning it
     if (!message.mentions.users.has(rivalBotId)) return;
     if (Math.random() >= 0.5) return; // only ~50% of the time

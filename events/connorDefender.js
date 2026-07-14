@@ -5,6 +5,7 @@
 
 const openai = require('../ai/openaiClient');
 const { BASE_PERSONALITY } = require('../ai/personality');
+const { isInWatchedCategory } = require('../utils/categoryCheck');
 
 const CONNOR_USER_ID = '576954029016481802';
 // Matches "connor", "Connor", "CONNOR", "Connors", "Connor's", etc - fully case-insensitive
@@ -19,6 +20,7 @@ module.exports = {
   name: 'messageCreate',
   async execute(message) {
     if (message.author.bot) return;
+    if (!isInWatchedCategory(message)) return;
     if (!CONNOR_NAME_PATTERN.test(message.content)) return;
 
     const soundsNegative = NEGATIVE_WORDS_PATTERN.test(message.content);

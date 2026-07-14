@@ -7,6 +7,7 @@
 const openai = require('../ai/openaiClient');
 const { BASE_PERSONALITY, JOKE_TARGETS } = require('../ai/personality');
 const { findMentionedMembers } = require('../ai/memberLookup');
+const { isInWatchedCategory } = require('../utils/categoryCheck');
 
 const JOKE_NAME_PATTERN = new RegExp(
   `\\b(${Object.values(JOKE_TARGETS).join('|')})\\b`,
@@ -32,6 +33,7 @@ module.exports = {
   name: 'messageCreate',
   async execute(message) {
     if (message.author.bot) return;
+    if (!isInWatchedCategory(message)) return;
 
     const botWasMentioned = message.mentions.users.has(message.client.user.id);
     if (!botWasMentioned) return;

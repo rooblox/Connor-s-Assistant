@@ -4,6 +4,7 @@
 
 const openai = require('../ai/openaiClient');
 const { BASE_PERSONALITY } = require('../ai/personality');
+const { isInWatchedCategory } = require('../utils/categoryCheck');
 
 const JUMP_IN_CHANCE = 0.01; // ~1% chance per eligible message - keep it rare
 const COOLDOWN_MS = 5 * 60 * 1000; // don't jump in more than once per 5 min per channel
@@ -14,6 +15,7 @@ module.exports = {
   name: 'messageCreate',
   async execute(message) {
     if (message.author.bot) return;
+    if (!isInWatchedCategory(message)) return;
     if (message.mentions.users.has(message.client.user.id)) return; // let mentionChat.js handle direct pings
     if (message.content.trim().length < 5) return; // skip super short/low-effort messages
 

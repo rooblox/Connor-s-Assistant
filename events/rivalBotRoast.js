@@ -4,6 +4,7 @@
 // 2. Every time a user @mentions the rival bot in their own message
 
 const openai = require('../ai/openaiClient');
+const { isInWatchedCategory } = require('../utils/categoryCheck');
 
 let messagesSeenSinceLastRoast = 0;
 let nextRoastThreshold = randomThreshold();
@@ -30,6 +31,8 @@ async function generateRoast(contextText) {
 module.exports = {
   name: 'messageCreate',
   async execute(message) {
+    if (!isInWatchedCategory(message)) return;
+
     const rivalBotId = process.env.RIVAL_BOT_ID;
 
     // --- Case 1: the rival bot posted a message ---

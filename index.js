@@ -56,11 +56,16 @@ player.events.on('error', (queue, error) => {
 player.events.on('playerError', (queue, error) => {
   console.error(`[music] Player error while streaming in guild ${queue.guild.id}:`, error);
 });
+let trackStartTimes = new Map();
+
 player.events.on('playerStart', (queue, track) => {
-  console.log(`[music] Started playing: ${track.title} in guild ${queue.guild.id}`);
+  trackStartTimes.set(queue.guild.id, Date.now());
+  console.log(`[music] Started playing: ${track.title} (expected duration: ${track.duration}) in guild ${queue.guild.id}`);
 });
 player.events.on('playerFinish', (queue, track) => {
-  console.log(`[music] Finished playing: ${track.title} in guild ${queue.guild.id}`);
+  const startedAt = trackStartTimes.get(queue.guild.id);
+  const actualSeconds = startedAt ? ((Date.now() - startedAt) / 1000).toFixed(1) : 'unknown';
+  console.log(`[music] Finished playing: ${track.title} after ${actualSeconds}s (expected: ${track.duration}) in guild ${queue.guild.id}`);
 });
 player.events.on('playerSkip', (queue, track) => {
   console.log(`[music] Track skipped/failed: ${track.title} in guild ${queue.guild.id}`);

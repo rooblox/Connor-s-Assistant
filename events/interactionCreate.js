@@ -1,5 +1,6 @@
 // events/interactionCreate.js
-// Runs whenever someone uses a slash command OR clicks a button.
+// Runs whenever someone uses a slash command, clicks a button, or picks
+// from a select menu.
 
 module.exports = {
   name: 'interactionCreate',
@@ -28,15 +29,34 @@ module.exports = {
 
     // --- Music control panel buttons ---
     if (interaction.isButton() && interaction.customId.startsWith('music_')) {
-      const { handleMusicButton } = require('../music/controlPanel');
       try {
+        const { handleMusicButton } = require('../music/controlPanel');
         await handleMusicButton(interaction);
       } catch (error) {
         console.error('Error handling music button:', error);
         if (!interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: 'Something went wrong with that button.', ephemeral: true });
+          await interaction.reply({ content: 'Something went wrong with that button.', ephemeral: true }).catch(() => {});
         }
       }
+      return;
+    }
+
+    // --- Uno buttons and select menus ---
+    if (
+      (interaction.isButton() || interaction.isStringSelectMenu()) &&
+      interaction.customId.startsWith('uno_')
+    ) {
+      console.log(`[uno] Interaction received: ${interaction.customId} from ${interaction.user.username}`);
+      try {
+        const { handleUnoInteraction } = require('../events/unoInteractions');
+        await handleUnoInteraction(interaction);
+      } catch (error) {
+        console.error('Error handling Uno interaction:', error);
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({ content: 'Something went wrong with that.', ephemeral: true }).catch(() => {});
+        }
+      }
+      return;
     }
   },
 };

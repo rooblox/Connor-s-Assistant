@@ -21,12 +21,12 @@ module.exports = {
     const game = gameManager.createGame(interaction.channel.id, interaction.guild.id, interaction.user.id);
     gameManager.addPlayer(game, interaction.user.id, interaction.user.username);
 
-    const message = await interaction.reply({
+    await interaction.reply({
       embeds: [renderLobbyEmbed(game)],
       components: [renderLobbyRow()],
-      fetchReply: true,
     });
 
+    const message = await interaction.fetchReply();
     game.publicMessageId = message.id;
   },
 };

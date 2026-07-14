@@ -1,20 +1,19 @@
 // commands/play.js
-// Plays a song from a YouTube link or search term, shows a "now playing"
-// embed with DJ control panel buttons, and applies this server's saved
-// auto-DJ setting automatically.
+// Plays a song from a search term (searches SoundCloud - free, reliable,
+// no API key needed) or a direct SoundCloud/YouTube link.
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { useMainPlayer, QueueRepeatMode } = require('discord-player');
+const { useMainPlayer, QueueRepeatMode, QueryType } = require('discord-player');
 const { buildControlRow } = require('../music/controlPanel');
 const GuildSettings = require('../models/GuildSettings');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Play a song from YouTube (link or search term)')
+    .setDescription('Play a song (search term or link)')
     .addStringOption(option =>
       option.setName('query')
-        .setDescription('YouTube link or search term')
+        .setDescription('Search term, or a SoundCloud/YouTube link')
         .setRequired(true)),
 
   async execute(interaction) {
@@ -34,6 +33,10 @@ module.exports = {
 
     try {
       const { track, queue } = await player.play(voiceChannel, query, {
+        // Only affects plain search terms (not direct links) - defaults
+        // searches to SoundCloud since it's far more reliable than YouTube
+        // right now (YouTube's anti-bot measures break most extractors).
+        searchEngine: QueryType.SOUNDCLOUD_SEARCH,
         nodeOptions: {
           metadata: {
             channel: interaction.channel,
@@ -63,7 +66,7 @@ module.exports = {
       await interaction.editReply({ embeds: [embed], components: [controlRow] });
     } catch (error) {
       console.error('[play] Failed to play track:', error);
-      await interaction.editReply(`Couldn't play that — try a different link or search term.`);
+      await interaction.editReply(`Couldn't play that — try a different search term or link.`);
     }
   },
 };

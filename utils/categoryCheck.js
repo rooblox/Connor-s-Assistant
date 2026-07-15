@@ -3,12 +3,10 @@
 // the bot should be "watching" for its chat-based AI features.
 
 function isInWatchedCategory(message) {
-  const watchedCategoryId = process.env.WATCHED_CATEGORY_ID;
+  const watchedCategoryId = process.env.WATCHED_CATEGORY_ID?.trim();
   if (!watchedCategoryId) return true; // if not configured, don't restrict anything
 
-  const result = message.channel.parentId === watchedCategoryId;
-  console.log(`[category-check] channel parentId: "${message.channel.parentId}" | watched: "${watchedCategoryId}" | match: ${result}`);
-  return result;
+  return message.channel.parentId === watchedCategoryId;
 }
 
 module.exports = { isInWatchedCategory };

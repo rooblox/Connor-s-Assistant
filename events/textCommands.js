@@ -4,7 +4,7 @@
 
 const { EmbedBuilder } = require('discord.js');
 const openai = require('../ai/openaiClient');
-const { BASE_PERSONALITY } = require('../ai/personality');
+const { BASE_PERSONALITY, JOKE_TARGETS } = require('../ai/personality');
 const { isInWatchedCategory } = require('../utils/categoryCheck');
 
 const COMMAND_PATTERN = /^-(compliment|roast|target)\s+<@!?(\d+)>/i;
@@ -41,6 +41,15 @@ module.exports = {
 
     try {
       if (commandType.toLowerCase() === 'compliment') {
+        if (JOKE_TARGETS[targetUserId]) {
+          const refusals = [
+            `Sorry, I don't compliment ${targetName}. It's policy.`,
+            `${targetName}? Yeah, no. I have standards.`,
+            `I'll compliment anyone in this server except ${targetName}, try again.`,
+          ];
+          await message.reply(refusals[Math.floor(Math.random() * refusals.length)]);
+          return;
+        }
         const text = await generateText(`Write a short, genuine but funny compliment about a Discord server member named "${targetName}". Keep it 1-2 sentences.`);
         await message.reply(text || `${targetName} is pretty great, honestly.`);
         return;

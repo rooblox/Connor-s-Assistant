@@ -2,7 +2,9 @@
 // When someone @mentions the bot, it reads their question PLUS the last
 // ~15 messages in the channel for context, so it actually knows what's
 // being talked about instead of answering blind. Only searches the web
-// if explicitly asked.
+// if explicitly asked. Resolves any other @mentions in the message to
+// real display names first, so commands like "roast @someone" correctly
+// target that person instead of defaulting to the joke-target bit.
 
 const openai = require('../ai/openaiClient');
 const { BASE_PERSONALITY, JOKE_TARGETS } = require('../ai/personality');
@@ -38,13 +40,27 @@ module.exports = {
     const botWasMentioned = message.mentions.users.has(message.client.user.id);
     if (!botWasMentioned) return;
 
-    const question = message.content
+    const rawQuestion = message.content
       .replace(new RegExp(`<@!?${message.client.user.id}>`, 'g'), '')
       .trim();
 
-    if (!question) {
+    if (!rawQuestion) {
       await message.reply(`What's up? Ask me something!`);
       return;
+    }
+
+    // Resolve any OTHER user mentions (e.g. "roast @someone") into their
+    // actual display name, so the AI knows exactly who's being targeted
+    // instead of seeing an unreadable <@id> and defaulting to a name it
+    // already knows (like a joke target).
+    let targetedUserName = null;
+    let question = rawQuestion;
+    const mentionedUsersInMessage = message.mentions.users.filter(u => u.id !== message.client.user.id);
+    for (const [, user] of mentionedUsersInMessage) {
+      const member = await message.guild.members.fetch(user.id).catch(() => null);
+      const displayName = member ? member.displayName : user.username;
+      targetedUserName = displayName;
+      question = question.replace(new RegExp(`<@!?${user.id}>`, 'g'), displayName);
     }
 
     await message.channel.sendTyping();
@@ -60,8 +76,15 @@ module.exports = {
       systemPrompt += `\n\nHere's the recent conversation in this channel for context (most recent last). Use it to understand what's being discussed, inside jokes, or what people have said, if relevant to the question:\n${chatContext}`;
     }
 
+    // If the person explicitly pinged/named someone as the target of this
+    // command, that ALWAYS takes priority over the default joke-target bit
+    // - only bring up Nina/Serry/Lyric if one of THEM was the one targeted.
+    if (targetedUserName) {
+      systemPrompt += `\n\nThe user is directing this command at a specific person: "${targetedUserName}". Target YOUR RESPONSE at this exact person - do not default to joking about Nina, Serry, or Lyric unless "${targetedUserName}" literally IS one of them.`;
+    }
+
     if (jokeTargetMatch) {
-      systemPrompt += `\n\nThe user just mentioned "${jokeTargetMatch[0]}" - this is 100% referring to the Discord server member with that name, one of your running joke targets. Do NOT treat this as any real-world public figure, artist, or celebrity under any circumstances. Respond with a short, funny, Discord-flavored joke/jab about them as a server member - not factual claims about a real person.`;
+      systemPrompt += `\n\nThe user mentioned "${jokeTargetMatch[0]}" - this is 100% referring to the Discord server member with that name, one of your running joke targets. Do NOT treat this as any real-world public figure, artist, or celebrity under any circumstances. Respond with a short, funny, Discord-flavored joke/jab about them as a server member - not factual claims about a real person.`;
     } else if (otherMembers.length > 0) {
       const memberContext = otherMembers
         .map(m => `- ${m.displayName} (username: ${m.username}${m.roles.length ? `, roles: ${m.roles.join(', ')}` : ''})`)

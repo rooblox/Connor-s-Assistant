@@ -6,6 +6,7 @@ const { EmbedBuilder } = require('discord.js');
 const openai = require('../ai/openaiClient');
 const { BASE_PERSONALITY, JOKE_TARGETS } = require('../ai/personality');
 const { isInWatchedCategory } = require('../utils/categoryCheck');
+const RoastStats = require('../models/RoastStats');
 
 const COMMAND_PATTERN = /^-(compliment|roast|target)\s+<@!?(\d+)>/i;
 
@@ -19,6 +20,14 @@ async function generateText(prompt) {
     ],
   });
   return completion.choices[0]?.message?.content?.trim();
+}
+
+async function trackRoast(userId) {
+  await RoastStats.findOneAndUpdate(
+    { userId },
+    { $inc: { roastCount: 1 } },
+    { upsert: true }
+  );
 }
 
 module.exports = {
@@ -58,6 +67,7 @@ module.exports = {
       if (commandType.toLowerCase() === 'roast') {
         const text = await generateText(`Write a short, playful roast of a Discord server member named "${targetName}". Keep it lighthearted, funny, not genuinely mean, 1-2 sentences.`);
         await message.reply(text || `${targetName}... yeah I got nothing, you're safe today.`);
+        await trackRoast(targetUserId);
         return;
       }
 

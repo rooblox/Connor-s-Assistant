@@ -10,6 +10,7 @@ const openai = require('../ai/openaiClient');
 const { BASE_PERSONALITY, JOKE_TARGETS } = require('../ai/personality');
 const { findMentionedMembers } = require('../ai/memberLookup');
 const { isInWatchedCategory } = require('../utils/categoryCheck');
+const RoastStats = require('../models/RoastStats');
 
 const JOKE_NAME_PATTERN = new RegExp(
   `\\b(${Object.values(JOKE_TARGETS).join('|')})\\b`,
@@ -17,6 +18,7 @@ const JOKE_NAME_PATTERN = new RegExp(
 );
 
 const SEARCH_INTENT_PATTERN = /\b(search|google|look ?up|find out|what'?s (the )?(latest|current|news)|current price|current weather)\b/i;
+const ROAST_INTENT_PATTERN = /\broast\b/i;
 
 async function getRecentChatContext(channel, excludeMessageId) {
   try {
@@ -29,6 +31,14 @@ async function getRecentChatContext(channel, excludeMessageId) {
   } catch {
     return '';
   }
+}
+
+async function trackRoast(userId) {
+  await RoastStats.findOneAndUpdate(
+    { userId },
+    { $inc: { roastCount: 1 } },
+    { upsert: true }
+  );
 }
 
 module.exports = {
@@ -54,12 +64,14 @@ module.exports = {
     // instead of seeing an unreadable <@id> and defaulting to a name it
     // already knows (like a joke target).
     let targetedUserName = null;
+    let targetedUserId = null;
     let question = rawQuestion;
     const mentionedUsersInMessage = message.mentions.users.filter(u => u.id !== message.client.user.id);
     for (const [, user] of mentionedUsersInMessage) {
       const member = await message.guild.members.fetch(user.id).catch(() => null);
       const displayName = member ? member.displayName : user.username;
       targetedUserName = displayName;
+      targetedUserId = user.id;
       question = question.replace(new RegExp(`<@!?${user.id}>`, 'g'), displayName);
     }
 
@@ -114,6 +126,11 @@ module.exports = {
       }
 
       await message.reply(replyText);
+
+      // Track it on the beef board if this was a roast request aimed at someone
+      if (targetedUserId && ROAST_INTENT_PATTERN.test(rawQuestion)) {
+        await trackRoast(targetedUserId);
+      }
     } catch (error) {
       console.error('[mention-chat] OpenAI request failed:', error);
       await message.reply(`Something broke asking that — try again in a bit.`);

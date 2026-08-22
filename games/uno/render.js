@@ -7,10 +7,11 @@ const gameManager = require('./gameManager');
 
 function renderLobbyEmbed(game) {
   const playerList = game.players.map(p => `• ${p.username}`).join('\n');
+  const modeLabel = game.mode === 'intense' ? '🔥 Intense (stacking, 7-0 rule, 30s turns)' : 'Classic';
   return new EmbedBuilder()
     .setTitle('🎴 Uno Lobby')
     .setColor(0xE74C3C)
-    .setDescription(`Click **Join** to play. The host can **Manage Players** to kick anyone, then hit **Start Game** (2-6 players) - a private game channel will be created for whoever's still in.\n\n**Players (${game.players.length}/6):**\n${playerList}`);
+    .setDescription(`Mode: **${modeLabel}**\n\nClick **Join** to play. The host can **Manage Players** to kick anyone, then hit **Start Game** (2-6 players) - a private game channel will be created for whoever's still in.\n\n**Players (${game.players.length}/6):**\n${playerList}`);
 }
 
 function renderLobbyRow() {
@@ -39,6 +40,7 @@ function renderGameEmbed(game) {
   const topCard = game.discardPile[game.discardPile.length - 1];
   const current = gameManager.currentPlayer(game);
   const colorEmoji = COLOR_EMOJI[game.currentColor];
+  const timeoutSeconds = game.mode === 'intense' ? 30 : 60;
 
   const playerList = game.players
     .map((p, i) => {
@@ -48,14 +50,19 @@ function renderGameEmbed(game) {
     })
     .join('\n');
 
-  const embed = new EmbedBuilder()
-    .setTitle('🎴 Uno')
+  let description = `**Current card:** ${cardLabel(topCard)}\n**Color in play:** ${colorEmoji}`;
+  if (game.pendingDrawStack) {
+    const stackLabel = game.pendingDrawStack.type === 'drawTwo' ? 'Draw Two' : 'Wild Draw Four';
+    description += `\n🥞 **Draw stack: ${game.pendingDrawStack.amount}** (${stackLabel}) - stack or draw!`;
+  }
+  description += `\n\n**It's ${current.username}'s turn!** (${timeoutSeconds}s to act)`;
+
+  return new EmbedBuilder()
+    .setTitle(`🎴 Uno${game.mode === 'intense' ? ' 🔥 Intense' : ''}`)
     .setColor(0xE74C3C)
-    .setDescription(`**Current card:** ${cardLabel(topCard)}\n**Color in play:** ${colorEmoji}\n\n**It's ${current.username}'s turn!** (60s to act)`)
+    .setDescription(description)
     .addFields({ name: 'Players', value: playerList })
     .setFooter({ text: `Click "My Hand" below to view your cards and play.` });
-
-  return embed;
 }
 
 function renderGameRow(game) {
@@ -107,6 +114,20 @@ function renderPlayAgainRow() {
   );
 }
 
+function renderSevenSwapSelect(game, currentUserId) {
+  const others = game.players.filter(p => p.id !== currentUserId);
+  if (others.length === 0) return null;
+
+  const options = others.map(p => ({ label: p.username, value: p.id }));
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('uno_seven_select')
+      .setPlaceholder('Choose who to swap hands with')
+      .addOptions(options),
+  );
+}
+
 module.exports = {
   renderLobbyEmbed,
   renderLobbyRow,
@@ -116,4 +137,5 @@ module.exports = {
   renderHandComponents,
   renderColorChoiceRow,
   renderPlayAgainRow,
+  renderSevenSwapSelect,
 };

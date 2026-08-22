@@ -1,7 +1,7 @@
 // events/unoInteractions.js
 // Handles all Uno button/select-menu interactions: join, manage/kick,
 // start, view hand, play a card, draw a card, choose a wild color,
-// call/catch UNO, and play again. Also runs the 60s turn timer.
+// call/catch UNO, 7-swap (Intense mode), and play again. Runs the turn timer.
 
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const gameManager = require('../games/uno/gameManager');
@@ -10,7 +10,7 @@ const UnoStats = require('../models/UnoStats');
 const {
   renderLobbyEmbed, renderLobbyRow, renderKickSelect,
   renderGameEmbed, renderGameRow,
-  renderHandComponents, renderColorChoiceRow, renderPlayAgainRow,
+  renderHandComponents, renderColorChoiceRow, renderPlayAgainRow, renderSevenSwapSelect,
 } = require('../games/uno/render');
 
 async function updateLobbyMessage(interaction, game) {
@@ -27,7 +27,6 @@ async function updateGameMessage(channel, game) {
   await message.edit({ embeds: [renderGameEmbed(game)], components: [renderGameRow(game)] });
 }
 
-// Kicks off the 60s auto-skip timer for whoever's turn it currently is
 function armTurnTimer(channel, game) {
   gameManager.scheduleTurnTimeout(game, async () => {
     if (game.status !== 'active') return;
@@ -230,9 +229,29 @@ async function handleUnoInteraction(interaction) {
       return handleGameOver(interaction.channel, game, result.winner);
     }
 
+    if (result.needsSevenSwap) {
+      const swapRow = renderSevenSwapSelect(game, interaction.user.id);
+      await interaction.update({ content: result.message, components: swapRow ? [swapRow] : [] });
+      await updateGameMessage(interaction.channel, game);
+      armTurnTimer(interaction.channel, game);
+      return;
+    }
+
     await interaction.update({ content: `Card played! ${result.message || ''}`, components: [] });
     await updateGameMessage(interaction.channel, game);
     armTurnTimer(interaction.channel, game);
+    return;
+  }
+
+  // --- 7-swap target selection (Intense mode) ---
+  if (customId === 'uno_seven_select') {
+    const targetId = interaction.values[0];
+    const swapResult = gameManager.performSevenSwap(game, interaction.user.id, targetId);
+    if (!swapResult) {
+      return interaction.update({ content: `That swap didn't work.`, components: [] });
+    }
+    await interaction.update({ content: `🔀 ${swapResult.fromPlayer.username} swapped hands with ${swapResult.toPlayer.username}!`, components: [] });
+    await updateGameMessage(interaction.channel, game);
     return;
   }
 
@@ -303,7 +322,7 @@ async function handleGameOver(channel, game, winner) {
   game.deletionTimer = setTimeout(async () => {
     gameManager.deleteGame(game.channelId);
     await channel.delete().catch(() => {});
-  }, 60_000); // give a full minute for someone to hit Play Again before deleting
+  }, 60_000);
 }
 
 module.exports = { handleUnoInteraction };

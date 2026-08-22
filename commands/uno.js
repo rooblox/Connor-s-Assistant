@@ -10,7 +10,15 @@ const { renderLobbyEmbed, renderLobbyRow } = require('../games/uno/render');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('uno')
-    .setDescription('Start a game of Uno'),
+    .setDescription('Start a game of Uno')
+    .addStringOption(option =>
+      option.setName('mode')
+        .setDescription('Game mode')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Classic', value: 'classic' },
+          { name: 'Intense (stacking, 7-0 rule, 30s turns)', value: 'intense' },
+        )),
 
   async execute(interaction) {
     const existing = gameManager.getGame(interaction.channel.id);
@@ -18,7 +26,9 @@ module.exports = {
       return interaction.reply({ content: `There's already an active Uno lobby/game in this channel.`, ephemeral: true });
     }
 
-    const game = gameManager.createGame(interaction.channel.id, interaction.guild.id, interaction.user.id, interaction.client);
+    const mode = interaction.options.getString('mode') || 'classic';
+
+    const game = gameManager.createGame(interaction.channel.id, interaction.guild.id, interaction.user.id, interaction.client, mode);
     gameManager.addPlayer(game, interaction.user.id, interaction.user.username);
 
     await interaction.reply({

@@ -1,16 +1,19 @@
 // games/uno/gameManager.js
 // Holds all currently active Uno games in memory (keyed by channel ID) and
-// the core game logic: dealing, turns, playing cards, special effects.
+// the core game logic: dealing, turns, playing cards, special effects,
+// turn timeouts, and the UNO call/catch mechanic.
 
 const { createShuffledDeck, canPlay } = require('./deck');
 
 const games = new Map(); // channelId -> game state
+const TURN_TIMEOUT_MS = 60_000; // 60s per turn before auto-skip
 
-function createGame(channelId, guildId, hostId) {
+function createGame(channelId, guildId, hostId, client) {
   const game = {
     channelId,
     guildId,
     hostId,
+    client, // stored so timer callbacks can fetch the channel later
     status: 'lobby', // lobby -> active -> finished
     players: [], // { id, username, hand: [] }
     deck: [],
@@ -19,6 +22,9 @@ function createGame(channelId, guildId, hostId) {
     direction: 1,
     currentColor: null,
     pendingWild: null, // { userId, cardUid } - waiting on a color choice
+    pendingUnoCallerId: null, // player who has 1 card and hasn't called UNO yet
+    turnTimer: null,
+    deletionTimer: null,
   };
   games.set(channelId, game);
   return game;
@@ -29,6 +35,11 @@ function getGame(channelId) {
 }
 
 function deleteGame(channelId) {
+  const game = games.get(channelId);
+  if (game) {
+    clearTurnTimer(game);
+    if (game.deletionTimer) clearTimeout(game.deletionTimer);
+  }
   games.delete(channelId);
 }
 
@@ -44,7 +55,6 @@ function startGame(game) {
     player.hand = game.deck.splice(0, 7);
   }
 
-  // Flip first card - if it's a wild, just keep re-shuffling it back and drawing again
   let firstCard = game.deck.pop();
   while (firstCard.color === 'wild') {
     game.deck.unshift(firstCard);
@@ -54,6 +64,7 @@ function startGame(game) {
   game.currentColor = firstCard.color;
   game.currentPlayerIndex = 0;
   game.status = 'active';
+  game.pendingUnoCallerId = null;
 
   return firstCard;
 }
@@ -70,7 +81,7 @@ function advanceTurn(game, steps = 1) {
 function drawCards(game, player, count) {
   for (let i = 0; i < count; i++) {
     if (game.deck.length === 0) reshuffleDiscardIntoDeck(game);
-    if (game.deck.length === 0) break; // truly nothing left
+    if (game.deck.length === 0) break;
     player.hand.push(game.deck.pop());
   }
 }
@@ -85,8 +96,6 @@ function reshuffleDiscardIntoDeck(game) {
   }
 }
 
-// Plays a card for the current player. chosenColor only needed for wild cards.
-// Returns { success, message, winner }
 function playCard(game, player, cardUid, chosenColor) {
   const topCard = game.discardPile[game.discardPile.length - 1];
   const cardIndex = player.hand.findIndex(c => c.uid === cardUid);
@@ -100,7 +109,6 @@ function playCard(game, player, cardUid, chosenColor) {
     return { success: false, message: `You need to choose a color for that card.`, needsColor: true };
   }
 
-  // Remove from hand, add to discard
   player.hand.splice(cardIndex, 1);
   game.discardPile.push(card);
   game.currentColor = card.color === 'wild' ? chosenColor : card.color;
@@ -110,7 +118,13 @@ function playCard(game, player, cardUid, chosenColor) {
     return { success: true, winner: player };
   }
 
-  // Apply card effects
+  // Track the UNO-call window
+  if (player.hand.length === 1) {
+    game.pendingUnoCallerId = player.id;
+  } else if (game.pendingUnoCallerId === player.id) {
+    game.pendingUnoCallerId = null; // they drew back above 1, safe
+  }
+
   let turnAdvance = 1;
   let effectMessage = '';
 
@@ -122,14 +136,14 @@ function playCard(game, player, cardUid, chosenColor) {
     case 'reverse':
       game.direction *= -1;
       effectMessage = `🔄 Direction reversed!`;
-      if (game.players.length === 2) turnAdvance = 2; // acts like skip in 2-player
+      if (game.players.length === 2) turnAdvance = 2;
       break;
     case 'drawTwo': {
       advanceTurn(game, 1);
       const victim = currentPlayer(game);
       drawCards(game, victim, 2);
       effectMessage = `${victim.username} draws 2 cards and is skipped!`;
-      turnAdvance = 1; // we already advanced once above, one more moves past the victim
+      turnAdvance = 1;
       break;
     }
     case 'wildDrawFour': {
@@ -150,8 +164,41 @@ function playCard(game, player, cardUid, chosenColor) {
 function drawCardForCurrentPlayer(game) {
   const player = currentPlayer(game);
   drawCards(game, player, 1);
+  if (game.pendingUnoCallerId === player.id && player.hand.length > 1) {
+    game.pendingUnoCallerId = null;
+  }
   advanceTurn(game, 1);
   return player;
+}
+
+function callUno(game, userId) {
+  if (game.pendingUnoCallerId === userId) {
+    game.pendingUnoCallerId = null;
+    return true;
+  }
+  return false;
+}
+
+// Another player catches someone who forgot to call UNO - they draw 2 penalty cards
+function catchUnoFailure(game) {
+  if (!game.pendingUnoCallerId) return null;
+  const offender = game.players.find(p => p.id === game.pendingUnoCallerId);
+  if (!offender) return null;
+  drawCards(game, offender, 2);
+  game.pendingUnoCallerId = null;
+  return offender;
+}
+
+function clearTurnTimer(game) {
+  if (game.turnTimer) {
+    clearTimeout(game.turnTimer);
+    game.turnTimer = null;
+  }
+}
+
+function scheduleTurnTimeout(game, onTimeout) {
+  clearTurnTimer(game);
+  game.turnTimer = setTimeout(onTimeout, TURN_TIMEOUT_MS);
 }
 
 module.exports = {
@@ -163,5 +210,9 @@ module.exports = {
   currentPlayer,
   playCard,
   drawCardForCurrentPlayer,
+  callUno,
+  catchUnoFailure,
+  clearTurnTimer,
+  scheduleTurnTimeout,
   games,
 };

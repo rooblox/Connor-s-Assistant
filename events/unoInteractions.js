@@ -1,15 +1,16 @@
 // events/unoInteractions.js
 // Handles all Uno button/select-menu interactions: join, manage/kick,
-// start (creates the private game channel), view hand, play a card,
-// draw a card, choose a wild color.
+// start, view hand, play a card, draw a card, choose a wild color,
+// call/catch UNO, and play again. Also runs the 60s turn timer.
 
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const gameManager = require('../games/uno/gameManager');
 const UnoGame = require('../models/UnoGame');
+const UnoStats = require('../models/UnoStats');
 const {
   renderLobbyEmbed, renderLobbyRow, renderKickSelect,
   renderGameEmbed, renderGameRow,
-  renderHandComponents, renderColorChoiceRow,
+  renderHandComponents, renderColorChoiceRow, renderPlayAgainRow,
 } = require('../games/uno/render');
 
 async function updateLobbyMessage(interaction, game) {
@@ -23,7 +24,19 @@ async function updateGameMessage(channel, game) {
   if (!game.publicMessageId) return;
   const message = await channel.messages.fetch(game.publicMessageId).catch(() => null);
   if (!message) return;
-  await message.edit({ embeds: [renderGameEmbed(game)], components: [renderGameRow()] });
+  await message.edit({ embeds: [renderGameEmbed(game)], components: [renderGameRow(game)] });
+}
+
+// Kicks off the 60s auto-skip timer for whoever's turn it currently is
+function armTurnTimer(channel, game) {
+  gameManager.scheduleTurnTimeout(game, async () => {
+    if (game.status !== 'active') return;
+    const skippedPlayer = gameManager.currentPlayer(game);
+    gameManager.drawCardForCurrentPlayer(game);
+    await channel.send(`⏱️ ${skippedPlayer.username} took too long — drew a card and their turn was skipped.`).catch(() => {});
+    await updateGameMessage(channel, game);
+    armTurnTimer(channel, game);
+  });
 }
 
 async function handleUnoInteraction(interaction) {
@@ -115,7 +128,6 @@ async function handleUnoInteraction(interaction) {
 
     await UnoGame.create({ channelId: gameChannel.id, guildId: guild.id, status: 'active' });
 
-    // Move the game from the old lobby-channel key to the new game channel
     gameManager.deleteGame(channelId);
     game.channelId = gameChannel.id;
     gameManager.games.set(gameChannel.id, game);
@@ -123,10 +135,11 @@ async function handleUnoInteraction(interaction) {
     gameManager.startGame(game);
 
     const mentions = game.players.map(p => `<@${p.id}>`).join(' ');
-    const gameMessage = await gameChannel.send({ content: mentions, embeds: [renderGameEmbed(game)], components: [renderGameRow()] });
+    const gameMessage = await gameChannel.send({ content: mentions, embeds: [renderGameEmbed(game)], components: [renderGameRow(game)] });
     game.publicMessageId = gameMessage.id;
 
-    // Update the original lobby message to point people to the new channel
+    armTurnTimer(gameChannel, game);
+
     if (game.publicMessageId) {
       const oldLobbyMessage = await interaction.channel.messages.fetch(interaction.message.id).catch(() => null);
       if (oldLobbyMessage) {
@@ -164,6 +177,29 @@ async function handleUnoInteraction(interaction) {
     gameManager.drawCardForCurrentPlayer(game);
     await interaction.reply({ content: `You drew a card. Turn passed to the next player.`, ephemeral: true });
     await updateGameMessage(interaction.channel, game);
+    armTurnTimer(interaction.channel, game);
+    return;
+  }
+
+  // --- Call UNO! (self) ---
+  if (customId === 'uno_calluno') {
+    const called = gameManager.callUno(game, interaction.user.id);
+    if (!called) {
+      return interaction.reply({ content: `You don't have a pending UNO call.`, ephemeral: true });
+    }
+    await interaction.reply({ content: `📢 UNO called! You're safe.` });
+    await updateGameMessage(interaction.channel, game);
+    return;
+  }
+
+  // --- Catch someone who forgot to call UNO ---
+  if (customId === 'uno_catch') {
+    const offender = gameManager.catchUnoFailure(game);
+    if (!offender) {
+      return interaction.reply({ content: `Nobody to catch right now.`, ephemeral: true });
+    }
+    await interaction.reply(`😤 ${interaction.user.username} caught ${offender.username} not calling UNO! They draw 2 penalty cards.`);
+    await updateGameMessage(interaction.channel, game);
     return;
   }
 
@@ -196,6 +232,7 @@ async function handleUnoInteraction(interaction) {
 
     await interaction.update({ content: `Card played! ${result.message || ''}`, components: [] });
     await updateGameMessage(interaction.channel, game);
+    armTurnTimer(interaction.channel, game);
     return;
   }
 
@@ -220,28 +257,53 @@ async function handleUnoInteraction(interaction) {
 
     await interaction.update({ content: `Card played! ${result.message || ''}`, components: [] });
     await updateGameMessage(interaction.channel, game);
+    armTurnTimer(interaction.channel, game);
+    return;
+  }
+
+  // --- Play again ---
+  if (customId === 'uno_playagain') {
+    if (game.status !== 'finished') {
+      return interaction.reply({ content: `This game isn't over yet.`, ephemeral: true });
+    }
+    if (game.deletionTimer) {
+      clearTimeout(game.deletionTimer);
+      game.deletionTimer = null;
+    }
+
+    await interaction.deferUpdate();
+
+    gameManager.startGame(game);
+    await UnoGame.findOneAndUpdate({ channelId: game.channelId }, { status: 'active' });
+
+    const gameMessage = await interaction.channel.send({ embeds: [renderGameEmbed(game)], components: [renderGameRow(game)] });
+    game.publicMessageId = gameMessage.id;
+    armTurnTimer(interaction.channel, game);
     return;
   }
 }
 
 async function handleGameOver(channel, game, winner) {
+  gameManager.clearTurnTimer(game);
+
   if (game.publicMessageId) {
     const message = await channel.messages.fetch(game.publicMessageId).catch(() => null);
     if (message) {
       await message.edit({
-        content: `🎉 **${winner.username} won the game!** This channel will be deleted shortly.`,
+        content: `🎉 **${winner.username} won the game!**`,
         embeds: [],
-        components: [],
+        components: [renderPlayAgainRow()],
       });
     }
   }
 
   await UnoGame.findOneAndUpdate({ channelId: game.channelId }, { status: 'finished' });
-  gameManager.deleteGame(game.channelId);
+  await UnoStats.findOneAndUpdate({ userId: winner.id }, { $inc: { wins: 1 } }, { upsert: true });
 
-  setTimeout(async () => {
+  game.deletionTimer = setTimeout(async () => {
+    gameManager.deleteGame(game.channelId);
     await channel.delete().catch(() => {});
-  }, 15_000);
+  }, 60_000); // give a full minute for someone to hit Play Again before deleting
 }
 
 module.exports = { handleUnoInteraction };

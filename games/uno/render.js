@@ -41,22 +41,37 @@ function renderGameEmbed(game) {
   const colorEmoji = COLOR_EMOJI[game.currentColor];
 
   const playerList = game.players
-    .map((p, i) => `${i === game.currentPlayerIndex ? '👉 ' : ''}${p.username} — ${p.hand.length} card${p.hand.length === 1 ? '' : 's'}`)
+    .map((p, i) => {
+      const turnMarker = i === game.currentPlayerIndex ? '👉 ' : '';
+      const unoWarning = game.pendingUnoCallerId === p.id ? ' 🚨 UNO!' : '';
+      return `${turnMarker}${p.username} — ${p.hand.length} card${p.hand.length === 1 ? '' : 's'}${unoWarning}`;
+    })
     .join('\n');
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setTitle('🎴 Uno')
     .setColor(0xE74C3C)
-    .setDescription(`**Current card:** ${cardLabel(topCard)}\n**Color in play:** ${colorEmoji}\n\n**It's ${current.username}'s turn!**`)
+    .setDescription(`**Current card:** ${cardLabel(topCard)}\n**Color in play:** ${colorEmoji}\n\n**It's ${current.username}'s turn!** (60s to act)`)
     .addFields({ name: 'Players', value: playerList })
     .setFooter({ text: `Click "My Hand" below to view your cards and play.` });
+
+  return embed;
 }
 
-function renderGameRow() {
-  return new ActionRowBuilder().addComponents(
+function renderGameRow(game) {
+  const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('uno_hand').setLabel('My Hand').setEmoji('🃏').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('uno_draw').setLabel('Draw Card').setEmoji('➕').setStyle(ButtonStyle.Secondary),
   );
+
+  if (game.pendingUnoCallerId) {
+    row.addComponents(
+      new ButtonBuilder().setCustomId('uno_calluno').setLabel('Call UNO!').setEmoji('📢').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('uno_catch').setLabel('Catch Them!').setEmoji('😤').setStyle(ButtonStyle.Danger),
+    );
+  }
+
+  return row;
 }
 
 function renderHandComponents(player) {
@@ -86,6 +101,12 @@ function renderColorChoiceRow() {
   );
 }
 
+function renderPlayAgainRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('uno_playagain').setLabel('Play Again').setEmoji('🔁').setStyle(ButtonStyle.Success),
+  );
+}
+
 module.exports = {
   renderLobbyEmbed,
   renderLobbyRow,
@@ -94,4 +115,5 @@ module.exports = {
   renderGameRow,
   renderHandComponents,
   renderColorChoiceRow,
+  renderPlayAgainRow,
 };

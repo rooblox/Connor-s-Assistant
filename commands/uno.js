@@ -18,7 +18,7 @@ module.exports = {
       return interaction.reply({ content: `There's already an active Uno lobby/game in this channel.`, ephemeral: true });
     }
 
-    const game = gameManager.createGame(interaction.channel.id, interaction.guild.id, interaction.user.id);
+    const game = gameManager.createGame(interaction.channel.id, interaction.guild.id, interaction.user.id, interaction.client);
     gameManager.addPlayer(game, interaction.user.id, interaction.user.username);
 
     await interaction.reply({

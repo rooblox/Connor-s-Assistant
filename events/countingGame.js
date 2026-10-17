@@ -305,4 +305,27 @@ async function finalizeBust(message, isSameUserTwice) {
   stats.currentStreak = 0;
   await stats.save();
 
-  await
+  await transferBadgeRole(message);
+}
+
+async function transferBadgeRole(message) {
+  const roleId = process.env.COUNTING_BADGE_ROLE_ID;
+  const guild = message.guild;
+  const role = guild.roles.cache.get(roleId);
+  if (!role) {
+    console.warn(`[counting] Badge role ${roleId} not found in guild.`);
+    return;
+  }
+
+  const currentHolders = role.members;
+  for (const [, member] of currentHolders) {
+    if (member.id !== message.author.id) {
+      await member.roles.remove(role).catch(() => {});
+    }
+  }
+
+  const member = await guild.members.fetch(message.author.id).catch(() => null);
+  if (member) {
+    await member.roles.add(role).catch(() => {});
+  }
+}

@@ -8,6 +8,7 @@ const countingStateSchema = new mongoose.Schema({
   _id: { type: String, default: 'counting_state' }, // fixed ID, always the same doc
   currentCount: { type: Number, default: 1 },
   lastUserId: { type: String, default: null },
+  lastMessageId: { type: String, default: null }, // the last CORRECT count message, used to catch deletions
 });
 
 module.exports = mongoose.model('CountingState', countingStateSchema);

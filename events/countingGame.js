@@ -1,6 +1,7 @@
 // events/countingGame.js
 // Counting game with math expression support (3x3, 9/3, 4+5 etc), persisted
 // to MongoDB so it survives restarts, plus per-user streak/stat tracking.
+// Milestones: 💯 on exactly 100, 🎉 on every later multiple of 100.
 
 const CountingState = require('../models/CountingState');
 const CountingStats = require('../models/CountingStats');
@@ -27,6 +28,13 @@ function tryEvaluateMath(rawContent) {
   }
 }
 
+// Which reaction a correct count gets
+function reactionFor(number) {
+  if (number === 100) return '💯';
+  if (number % 100 === 0) return '🎉';
+  return '✅';
+}
+
 module.exports = {
   name: 'messageCreate',
   async execute(message) {
@@ -46,10 +54,12 @@ module.exports = {
     const isSameUserTwice = message.author.id === state.lastUserId;
 
     if (isCorrectNumber && !isSameUserTwice) {
-      await message.react('✅');
+      const countedNumber = state.currentCount;
+      await message.react(reactionFor(countedNumber));
 
       state.currentCount += 1;
       state.lastUserId = message.author.id;
+      state.lastMessageId = message.id; // so we can catch it if they delete it
       await state.save();
 
       // Update this user's stats
@@ -77,6 +87,7 @@ module.exports = {
 
     state.currentCount = 1;
     state.lastUserId = null;
+    state.lastMessageId = null;
     await state.save();
 
     // Reset the messer-upper's personal streak

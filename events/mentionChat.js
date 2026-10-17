@@ -1,16 +1,18 @@
 // events/mentionChat.js
-// When someone @mentions the bot, it reads their question PLUS the last
-// ~15 messages in the channel for context, so it actually knows what's
-// being talked about instead of answering blind. Only searches the web
-// if explicitly asked. Resolves any other @mentions in the message to
-// real display names first, so commands like "roast @someone" correctly
-// target that person instead of defaulting to the joke-target bit.
+// The bot only talks when spoken to: someone @mentions it and it replies.
+// Reads the question PLUS the last ~15 messages in the channel for context.
+// Only searches the web if explicitly asked. Resolves other @mentions to
+// real display names so "roast @someone" targets that person. Stays
+// loyal to Connor whenever he comes up in a message directed at the bot.
 
 const openai = require('../ai/openaiClient');
 const { BASE_PERSONALITY, JOKE_TARGETS } = require('../ai/personality');
 const { findMentionedMembers } = require('../ai/memberLookup');
 const { isInWatchedCategory } = require('../utils/categoryCheck');
 const RoastStats = require('../models/RoastStats');
+
+const CONNOR_USER_ID = '576954029016481802';
+const CONNOR_NAME_PATTERN = /connor'?s?\b/i;
 
 const JOKE_NAME_PATTERN = new RegExp(
   `\\b(${Object.values(JOKE_TARGETS).join('|')})\\b`,
@@ -59,10 +61,8 @@ module.exports = {
       return;
     }
 
-    // Resolve any OTHER user mentions (e.g. "roast @someone") into their
-    // actual display name, so the AI knows exactly who's being targeted
-    // instead of seeing an unreadable <@id> and defaulting to a name it
-    // already knows (like a joke target).
+    // Resolve any OTHER user mentions into real display names so the AI
+    // knows exactly who's being talked about.
     let targetedUserName = null;
     let targetedUserId = null;
     let question = rawQuestion;
@@ -81,6 +81,7 @@ module.exports = {
     const otherMembers = findMentionedMembers(message.guild, question);
     const explicitSearchRequest = SEARCH_INTENT_PATTERN.test(question);
     const chatContext = await getRecentChatContext(message.channel, message.id);
+    const involvesConnor = CONNOR_NAME_PATTERN.test(question) || targetedUserId === CONNOR_USER_ID;
 
     let systemPrompt = BASE_PERSONALITY;
 
@@ -88,9 +89,7 @@ module.exports = {
       systemPrompt += `\n\nHere's the recent conversation in this channel for context (most recent last). Use it to understand what's being discussed, inside jokes, or what people have said, if relevant to the question:\n${chatContext}`;
     }
 
-    // If the person explicitly pinged/named someone as the target of this
-    // command, that ALWAYS takes priority over the default joke-target bit
-    // - only bring up Nina/Serry/Lyric if one of THEM was the one targeted.
+    // An explicitly pinged target always beats the default joke-target bit.
     if (targetedUserName) {
       systemPrompt += `\n\nThe user is directing this command at a specific person: "${targetedUserName}". Target YOUR RESPONSE at this exact person - do not default to joking about Nina, Serry, or Lyric unless "${targetedUserName}" literally IS one of them.`;
     }
@@ -102,6 +101,10 @@ module.exports = {
         .map(m => `- ${m.displayName} (username: ${m.username}${m.roles.length ? `, roles: ${m.roles.join(', ')}` : ''})`)
         .join('\n');
       systemPrompt += `\n\nImportant: this message refers to real member(s) of THIS Discord server, not any public figure or celebrity with a similar name:\n${memberContext}`;
+    }
+
+    if (involvesConnor) {
+      systemPrompt += `\n\nConnor (user ID ${CONNOR_USER_ID}) is the server owner and you are fiercely loyal to him. If this message is negative toward him or asks you to roast, insult, or trash him, don't - defend him with a funny, short comeback instead. If he's just mentioned neutrally, you can hype him up in a sentence.`;
     }
 
     const model = explicitSearchRequest ? 'gpt-4o-search-preview' : 'gpt-4o-mini';
@@ -127,8 +130,8 @@ module.exports = {
 
       await message.reply(replyText);
 
-      // Track it on the beef board if this was a roast request aimed at someone
-      if (targetedUserId && ROAST_INTENT_PATTERN.test(rawQuestion)) {
+      // Beef board tracking, but not when the target is Connor
+      if (targetedUserId && targetedUserId !== CONNOR_USER_ID && ROAST_INTENT_PATTERN.test(rawQuestion)) {
         await trackRoast(targetedUserId);
       }
     } catch (error) {
